@@ -73,105 +73,27 @@ import (
 	"log"
 
 	//"database/sql"
-	_ "github.com/lib/pq"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 	//"time"
 	"labix.org/v2/mgo"
 
-	"labix.org/v2/mgo/bson"
-	"io/ioutil"
-	"io"
 	"crypto/sha1"
+	"io"
+	"io/ioutil"
+
 	"github.com/jordan-wright/email"
+	"labix.org/v2/mgo/bson"
 
 	"net/smtp"
 )
 
-//	подключение к БД
-const (
-	//	Файл настроек
-	SETTINGS_FILE_NAME = "cloud.conf"
-	USERS_FILE_NAME = "users.conf"
-	//	ДБ
-	DB_HOST		= "192.168.1.50"
-	DB_USER     = "qz0.ru"
-	DB_PASSWORD = ""
-	DB_NAME     = "qz0.ru"
-	//	роутинг
-	LISTENING_PORT = "12346"
-)
-
-//	структура одного поста
-type settingsStruct struct{
-	ListeningIp string
-	ListeningPort string
-	EmailSmtpServerIp string
-	EmailSmtpServerPort string
-	EmailSmtpLogin string
-	EmailSmtpPassword string
-	EmailFromName string
-	EmailFromMail string
-	EmailTo string
-	EmailCopy string
-	EmailShadow string
-	EmailSubjectAdm string
-	EmailTextBeforeUsernameAdm string
-	EmailTextAfterUsernameAdm string
-	EmailSubjectUser string
-	EmailTextBeforeUsernameUser string
-	EmailTextAfterUsernameUser string
-}
-
-type cloudUsersStruct struct{
-	UserName string
-	UserEmail string
-}
-
-//	структура одного поста
-type postStruct struct{
-	PostId string `json:"_id"`
-	PostTitle string `json:"posttitle"`
-	CreateDate string `json:"createdate"`
-	PostTags []string `json:"posttags"`
-	PostBody string `json:"postbody"`
-	Picture string `json:"picture"`
-}
-
-//	структура одного поста
-type postStructForSend struct{
-	PostTitle string `json:"posttitle"`
-	CreateDate string `json:"createdate"`
-	PostTags []string `json:"posttags"`
-	PostBody string `json:"postbody"`
-	Picture string `json:"picture"`
-}
-
-//	структура одной новости
-type newsStruct struct{
-	Author string `json:"author"`
-	Date string `json:"date"`
-	Picture string `json:"picture"`
-	Text string `json:"text"`
-	Title string `json:"title"`
-}
-
-//	проверочная структура
-type testStruct struct{
-	Text string
-	Number int
-}
 //	*********************
 //	Глобальные переменные
 //	*********************
+var users []usersStruct
 
-//	Какой порт слушаем
-var	listeningPort string
-
-//	Объявляем структурку настроек
-var mySettings settingsStruct
 //	*********************
-//	Объявляем структурку пользователей
-var myCloudUsers []cloudUsersStruct
 
 //	точка входа
 func main() {
@@ -183,52 +105,56 @@ func main() {
 	//	Инитим аргументы из командной строки
 	initPromptArgs()
 
+	//	Подключаемся к БД
+	loadUsersFromDB(&users)
+	fmt.Println(users)
+
 	fmt.Println("Start")
-	type sourceStruct struct{
+	type sourceStruct struct {
 		Category string
-		Number int
+		Number   int
 	}
 
-	type shardsStruct struct{
-		Total int
+	type shardsStruct struct {
+		Total      int
 		Successful int
-		Skipped int
+		Skipped    int
 	}
-	type shardsWithoutSkippedStruct struct{
-		Total int
+	type shardsWithoutSkippedStruct struct {
+		Total      int
 		Successful int
-		Failed int
+		Failed     int
 	}
-	type hitsHitsStruct struct{
-		HitsIndex string `json:"_index"`
-		HitsType string `json:"_type"`
-		HitsId string `json:"_id"`
-		HitsScore float32 `json:"_score"`
-		HitsSource sourceStruct  `json:"_source"`
+	type hitsHitsStruct struct {
+		HitsIndex  string       `json:"_index"`
+		HitsType   string       `json:"_type"`
+		HitsId     string       `json:"_id"`
+		HitsScore  float32      `json:"_score"`
+		HitsSource sourceStruct `json:"_source"`
 	}
-	type hitsStruct struct{
-		Total int
+	type hitsStruct struct {
+		Total    int
 		MaxScore float32 `json:"max_score"`
-		Hits []hitsHitsStruct
+		Hits     []hitsHitsStruct
 	}
-	type responceStruct struct{
-		Took int
+	type responceStruct struct {
+		Took    int
 		TimeOut bool
-		Shards shardsStruct `json:"_shards"`
-		Hits hitsStruct
+		Shards  shardsStruct `json:"_shards"`
+		Hits    hitsStruct
 	}
-	type requestStruct struct{
+	type requestStruct struct {
 		Category string `json:"category"`
-		Number int `json:"number"`
+		Number   int    `json:"number"`
 	}
-	type addItemResponceStruct struct{
-		Index string `json:"_index"`
-		Type string `json:"_type"`
-		Id string `json:"_id"`
-		Result string `json:"_result"`
-		Shards shardsWithoutSkippedStruct `json:"_shards"`
-		SeqNo int `json:"_seq_no"`
-		PrimaryTerm int `json:"_primary_term"`
+	type addItemResponceStruct struct {
+		Index       string                     `json:"_index"`
+		Type        string                     `json:"_type"`
+		Id          string                     `json:"_id"`
+		Result      string                     `json:"_result"`
+		Shards      shardsWithoutSkippedStruct `json:"_shards"`
+		SeqNo       int                        `json:"_seq_no"`
+		PrimaryTerm int                        `json:"_primary_term"`
 	}
 
 	//
@@ -237,7 +163,6 @@ func main() {
 
 	//resp, err := http.NewRequest(http.MethodGet, "http://localhost:9200", nil)
 	//resp, err := http.Get("http://localhost:9200/data/test00/_search?q={'matchAll':{''}}")
-
 
 	//fmt.Println(strconv.Btoa(body))
 
@@ -316,21 +241,9 @@ func main() {
 	//json.Unmarshal(body2, &struct0)
 	//fmt.Println(struct0.Result)
 
+	//
 	//	Роутер
-	router := mux.NewRouter()
-	//router.HandleFunc("/add_post", addPostFunc).Methods("GET")
-	router.HandleFunc("/add-post", addPostFunc).Methods("POST")
-	router.HandleFunc("/posts", postsFunc).Methods("GET")
-	router.HandleFunc("/upload", uploadFunc).Methods("POST")
-	router.HandleFunc("/news", newsFunc).Methods("GET")
-	router.HandleFunc("/test", testFunc).Methods("GET")
-	router.HandleFunc("/test/{id}", testFunc).Methods("GET")
-	router.HandleFunc("/cloud", cloudFunc).Methods("GET")
-	router.HandleFunc("/cloud/{id}", cloudFunc).Methods("GET")
-	router.HandleFunc("/cloud/{id}", cloudUploadFile).Methods("POST")
-	router.HandleFunc("/cloud/{id}/{file}", cloudFunc).Methods("GET")
-	router.HandleFunc("/cloud/{id}/{file}/{user}", cloudFunc).Methods("GET")
-	log.Fatal(http.ListenAndServe(":" + listeningPort, router))
+	createRouter()
 
 }
 
@@ -377,7 +290,7 @@ func getText(articleUrl string) string {
 	for _, section := range sections {
 		datas := section.FindAll("p")
 		for _, data := range datas {
-			if 	(data.Attrs()["class"] == "special__button" ||
+			if (data.Attrs()["class"] == "special__button" ||
 				data.Attrs()["class"] == "listing__excerpt") ||
 				len(data.Attrs()["data-line-id"]) < 1 {
 				continue
@@ -430,7 +343,7 @@ func psForNews() []newsStruct {
 		datas := div.FindAll("a")
 		for _, data := range datas {
 			if strings.Contains(data.Attrs()["href"], "commentary") {
-				news :=newsStruct {
+				news := newsStruct{
 					data.Attrs()["href"],
 					"",
 					"",
@@ -507,8 +420,6 @@ func postsFunc(w http.ResponseWriter, req *http.Request) {
 		//	Return Resp
 		json.NewEncoder(w).Encode(posts)
 
-
-
 	} else {
 		fmt.Println("isEmplty")
 		json.NewEncoder(w).Encode("{test: 'test'}")
@@ -526,7 +437,6 @@ func postsFunc(w http.ResponseWriter, req *http.Request) {
 		err = db.Select(&post, "SELECT text, number FROM test WHERE number=11")
 		fmt.Print("Is :", err)
 		fmt.Print(post, len(post))
-
 
 		//if err != nil {
 		//	fmt.Println(err)
@@ -557,7 +467,6 @@ func postsFunc(w http.ResponseWriter, req *http.Request) {
 
 		//fmt.Print("\nError: ", rows.Err())
 	}
-
 
 }
 
@@ -591,6 +500,7 @@ func addPostFunc(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 }
+
 //	ответ на посты
 func uploadFunc(w http.ResponseWriter, req *http.Request) {
 	//params := mux.Vars(req)
@@ -607,7 +517,6 @@ func uploadFunc(w http.ResponseWriter, req *http.Request) {
 		fmt.Println(req)
 		// они все тут
 		formdata := req.MultipartForm // ok, no problem so far, read the Form data
-
 
 		//get the *fileheaders
 		files := formdata.File["myFile"] // grab the filenames
@@ -637,7 +546,6 @@ func uploadFunc(w http.ResponseWriter, req *http.Request) {
 		defer f.Close()
 		io.Copy(f, file)
 
-
 		//file, err := files[0].Open()
 
 		fmt.Println("1")
@@ -659,15 +567,13 @@ func newsFunc(w http.ResponseWriter, req *http.Request) {
 		fmt.Println("newsFunc")
 
 		//	Session Closed
-		news:=[]newsStruct{}
+		news := []newsStruct{}
 		//	Error
 		news = psForNews()
 		//	Return Resp
 		json.NewEncoder(w).Encode(news)
 
 		//fmt.Println(len(news))
-
-
 
 	} else {
 		fmt.Println("isEmplty")
@@ -686,7 +592,6 @@ func newsFunc(w http.ResponseWriter, req *http.Request) {
 		err = db.Select(&post, "SELECT text, number FROM test WHERE number=11")
 		fmt.Print("Is :", err)
 		fmt.Print(post, len(post))
-
 
 		//if err != nil {
 		//	fmt.Println(err)
@@ -718,9 +623,7 @@ func newsFunc(w http.ResponseWriter, req *http.Request) {
 		//fmt.Print("\nError: ", rows.Err())
 	}
 
-
 }
-
 
 func testFunc(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
@@ -745,7 +648,6 @@ func testFunc(w http.ResponseWriter, req *http.Request) {
 		fmt.Print("Is :", err)
 		fmt.Print(test0, len(test0))
 
-
 		//if err != nil {
 		//	fmt.Println(err)
 		//	return
@@ -775,7 +677,6 @@ func testFunc(w http.ResponseWriter, req *http.Request) {
 
 		//fmt.Print("\nError: ", rows.Err())
 	}
-
 
 }
 
@@ -928,7 +829,7 @@ func cloudFunc(w http.ResponseWriter, req *http.Request) {
 			AddForm += "<option>" + myCloudUser.UserName + "</option>"
 		}
 
-		AddForm +=   	`
+		AddForm += `
 			</select>
 			Добавить файл: <input type="file" name="uploadFile">
 			<input type="submit" value="Добавить">
@@ -1057,22 +958,6 @@ func cloudFunc(w http.ResponseWriter, req *http.Request) {
 
 	}
 
-
-}
-
-//	Инициализация данных из командной строки
-func initPromptArgs() {
-	//	Представляемся
-	fmt.Println("Вошли в initPromptArgs")
-	//	Проверяем сколько аргументов в командной строке
-	if len(os.Args) > 1 {
-		//	Аргумента два - первый : порт подкючения
-		listeningPort = os.Args[1]
-	} else {
-		//	Аргумент один - порт подключения берем по умолчанию
-		listeningPort = LISTENING_PORT
-	}
-	fmt.Println(listeningPort)
 }
 
 //	ответ на посты
@@ -1091,7 +976,6 @@ func cloudUploadFile(w http.ResponseWriter, req *http.Request) {
 		fmt.Println(req)
 		// они все тут
 		formdata := req.MultipartForm // ok, no problem so far, read the Form data
-
 
 		user := formdata.Value["user"]
 		//get the *fileheaders
@@ -1122,7 +1006,6 @@ func cloudUploadFile(w http.ResponseWriter, req *http.Request) {
 		defer f.Close()
 		io.Copy(f, file)
 
-
 		//file, err := files[0].Open()
 
 		fmt.Println(user)
@@ -1130,7 +1013,6 @@ func cloudUploadFile(w http.ResponseWriter, req *http.Request) {
 		//******************************
 		//	Отправка письма
 		cloudSendFileByMail(true, user[0], handler.Filename)
-
 
 		//******************************
 
@@ -1165,9 +1047,9 @@ func cloudSendFileByMail(typeOfMessage bool, username string, filename string) {
 		e.Subject = mySettings.EmailSubjectAdm
 
 		e.HTML = []byte(mySettings.EmailTextBeforeUsernameAdm + username + mySettings.EmailTextAfterUsernameAdm + `
-		<br><a href="http://` + mySettings.ListeningIp + `:`+ mySettings.ListeningPort +
-			`/cloud/sendfile/` + username  + `/` + filename + `">Разрешить</a>
-		<br><a href="http://` + mySettings.ListeningIp +`:`+ mySettings.ListeningPort +
+		<br><a href="http://` + mySettings.ListeningIp + `:` + mySettings.ListeningPort +
+			`/cloud/sendfile/` + username + `/` + filename + `">Разрешить</a>
+		<br><a href="http://` + mySettings.ListeningIp + `:` + mySettings.ListeningPort +
 			`/cloud/deletefile/` + filename + `">Отклонить</a>`)
 
 	} else {
@@ -1189,8 +1071,8 @@ func cloudSendFileByMail(typeOfMessage bool, username string, filename string) {
 	//	Сама отправка
 	e.From = mySettings.EmailFromName + " <" + mySettings.EmailFromMail + ">"
 	//e.Text = []byte("Text Body is, of course, supported!")
-	e.AttachFile("./data/"+filename)
-	err := e.Send(mySettings.EmailSmtpServerIp + ":" + mySettings.EmailSmtpServerPort,
+	e.AttachFile("./data/" + filename)
+	err := e.Send(mySettings.EmailSmtpServerIp+":"+mySettings.EmailSmtpServerPort,
 		smtp.PlainAuth("", mySettings.EmailSmtpLogin, mySettings.EmailSmtpPassword,
 			mySettings.EmailSmtpServerIp))
 	if err != nil {
@@ -1199,53 +1081,6 @@ func cloudSendFileByMail(typeOfMessage bool, username string, filename string) {
 		fmt.Println(err)
 		return
 	}
-}
-
-//	программа загрузки настроек
-func loadSettings() {
-
-	//	Читаем содержимое файла настроек
-	myFile, err := os.Open(SETTINGS_FILE_NAME)
-	if err != nil {
-
-		//	Файла нет - создаем
-		myFile, err := os.OpenFile("./"+SETTINGS_FILE_NAME, os.O_WRONLY|os.O_CREATE, 0666)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		defer myFile.Close()
-
-		//	Объявляем для примера один параметр
-		mySettings.ListeningPort = LISTENING_PORT
-		//	Маршализируем
-		buf, err := json.Marshal(mySettings)
-		//	Копируем структурку в файлик
-		myFile.Write(buf)
-
-		return
-	}
-	//	Отложенно закрываем
-	defer myFile.Close()
-
-	// Получить размер файла
-	stat, err := myFile.Stat()
-	if err != nil {
-		return
-	}
-
-	// Чтение файла
-	buf := make([]byte, stat.Size())
-	_, err = myFile.Read(buf)
-	if err != nil {
-		return
-	}
-
-	//	Маршалим прочитанное в структуру
-	json.Unmarshal(buf, &mySettings)
-
-	//	Выводим сообщение
-	fmt.Println("Процесс инициализации завершен")
 }
 
 //	программа загрузки настроек
@@ -1289,7 +1124,6 @@ func loadCloudUsers() {
 	json.Unmarshal(buf, &myCloudUsers)
 
 	//	Выводим сообщение
-	fmt.Println("Процесс подгрузки списка пользователей завершен3")
+	fmt.Println("Процесс подгрузки списка пользователей завершен5")
 	fmt.Println(myCloudUsers)
 }
-
